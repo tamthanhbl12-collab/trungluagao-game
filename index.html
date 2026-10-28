@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Trungluagao - Làng Quê Mini</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trungluagao">
+<meta name="theme-color" content="#4d7a3a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet">
 <style>
   :root{--ink:#5a4630;--paper:#fffdf5;--gold:#b8791f;--green:#4d7a3a}
@@ -71,6 +78,7 @@
   <button class="btn shop" id="bReset" style="top:525px;font-size:13px">↺ Chơi lại</button>
   <button class="btn shop" id="bSeason" style="top:585px;font-size:13px">↻ Đổi mùa</button>
   <a class="btn shop" id="bFeed" href="https://zalo.me/0962120839" target="_blank" rel="noopener" style="top:640px;font-size:14px">💬 Góp ý<small>qua Zalo</small></a>
+  <button class="btn shop" id="bFull" style="top:695px;font-size:14px">⛶ Toàn màn hình</button>
   <div class="card" id="sign">🌾 Ruộng lúa</div>
   <div class="card" id="sign2" style="left:1010px;top:690px;font-size:20px;color:#2f6a7a;transform:rotate(1.5deg);padding:6px 18px">🐟 Đìa cá</div>
   <div class="card" id="brand"><b>Trungluagao</b><small>Hotline / Zalo: 0962.12.08.39</small></div>
@@ -985,6 +993,9 @@ $('bFish').onclick=()=>openPanel('fish');$('bPig').onclick=buyPig;
 $('bBuild').onclick=()=>{const p=$('panel');if(p.style.display==='block'&&panelMode==='build')p.style.display='none';else openPanel('build')};
 $('pclose').onclick=()=>{$('panel').style.display='none'};
 $('plist').onclick=e=>{const d=e.target.dataset||{};if(d.id)build(d.id);if(d.fish!==undefined)addFish(+d.fish)};$('bDuck').onclick=()=>buy('duck');$('bChick').onclick=()=>buy('chick');
+function goFull(){const e=document.documentElement;if(document.fullscreenElement||document.webkitFullscreenElement)return;const f=e.requestFullscreen||e.webkitRequestFullscreen;if(f){try{const p=f.call(e);if(p&&p.catch)p.catch(()=>{})}catch(err){}}}
+$('bFull').onclick=()=>{if(document.fullscreenElement||document.webkitFullscreenElement)(document.exitFullscreen||document.webkitExitFullscreen).call(document);else goFull()};
+['pointerdown','keydown'].forEach(ev=>addEventListener(ev,goFull,{once:true}));
 $('bSeason').onclick=()=>{S.day=(Math.floor((S.day-1)/SEASON_DAYS)+1)*SEASON_DAYS+1;S.min=420};
 $('bReset').onclick=()=>{if(confirm('Chơi lại từ đầu? Tiến trình hiện tại sẽ mất.')){S=fresh();save()}};
 

@@ -1,0 +1,14 @@
+{
+  "name": "Trungluagao - Làng Quê Mini",
+  "short_name": "Trungluagao",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#2b2a24",
+  "theme_color": "#4d7a3a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

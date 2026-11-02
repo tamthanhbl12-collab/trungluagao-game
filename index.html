@@ -171,7 +171,7 @@ try{const j=JSON.parse(localStorage.getItem('langque_v7'));if(j&&j.plots&&j.fish
 function save(){try{localStorage.setItem('langque_v7',JSON.stringify(S))}catch(e){}}
 setInterval(save,5000);addEventListener('beforeunload',save);
 
-let paused=false,soundOn=true,fx=[],rain=0;
+let paused=false,soundOn=true,fx=[],rain=0,rainMax=1,flash=0,bolt=null;
 const vill=[
 ];
 const P={x:640,y:450,d:1,goal:null,pending:null,moving:false,hat:'#f6e6a8',cloth:'#2f8a5a',gender:'f',age:0,hatKind:'non'};
@@ -707,7 +707,7 @@ function drawMarket(t){
   STALLS.forEach(s=>drawStall(s.x,by,'Sạp '+s.own,s.goods,true,t,s.look,s.col));
   const mine=!!S.built.stall,pl=S.char?lookOf(S.char):null;
   drawStall(MYSTALL.x,by,'Sạp '+(S.char?S.char.name:'của bạn'),'mine',mine,t,pl,'#3f7a4a');
-  [0,1,2].forEach(k=>{const u=((t*28+k*260)%1200),x=420+Math.abs(u-600),y=468+k*22;
+  if(rain<=0)[0,1,2].forEach(k=>{const u=((t*28+k*260)%1200),x=420+Math.abs(u-600),y=468+k*22;
     drawPerson({x,y,d:u<600?-1:1,hat:'#ecd9a3',cloth:['#6a5a9a','#b5453a','#3f8a6a'][k],gender:k===1?'m':'f',age:k===2?1:0,hatKind:['non','mu','khan'][k],pause:0,spd:1},t)});
   tagText(175,by+36,'Thú y · thức ăn chăn nuôi',18);tagText(505,by+36,'Lúa giống · phân bón',18);
   if(mine&&(S.gao>0||S.sua>0))tagText(MYSTALL.x,by+36,'Bấm bán '+S.gao+' bao gạo, '+S.sua+' chai sữa',16);
@@ -764,6 +764,31 @@ $('cname').oninput=e=>{draft.name=e.target.value.slice(0,14)};
 $('cdone').onclick=()=>{draft.name=($('cname').value||'Nông dân').trim().slice(0,14)||'Nông dân';S.char=Object.assign({},draft);applyChar();creatorOpen=false;$('creator').classList.remove('on');save()};
 $('bChar').onclick=openCreator;
 setInterval(()=>{if(creatorOpen)drawPreview()},120);
+
+/* ---------- bao / mua gio / set ---------- */
+const rainI=()=>rain>0?Math.min(1,rain/4,(rainMax-rain)/3+.15):0;
+const LEAVES=Array.from({length:26},()=>({x:Math.random()*1400,y:Math.random()*800,r:Math.random()*6,s:90+Math.random()*120,v:Math.random()*40,c:['#6fa84a','#9ab83a','#c8902a','#8a6a3a'][Math.floor(Math.random()*4)]}));
+function drawStorm(t){
+  const I=rainI(),g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,`rgba(30,38,54,${.58*I})`);g.addColorStop(.6,`rgba(58,70,86,${.4*I})`);g.addColorStop(1,`rgba(70,84,98,${.24*I})`);
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const gust=.75+.25*Math.sin(t*.7)+.2*Math.sin(t*2.3),slant=10+16*gust;
+  ctx.strokeStyle=`rgba(210,228,240,${.75*I})`;ctx.lineWidth=1.4;ctx.beginPath();
+  for(let i=0;i<190;i++){const x=(i*137.5+t*(120+80*gust))%1500-100,y=(i*71+t*700)%850;ctx.moveTo(x,y);ctx.lineTo(x-slant*.4,y+16)}ctx.stroke();
+  ctx.strokeStyle=`rgba(255,255,255,${.13*I})`;ctx.lineWidth=1.2;
+  for(let k=0;k<6;k++){const x=((t*(260+k*40)+k*300)%1700)-200,y=120+k*95+Math.sin(t+k)*10;ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+60,y-8,x+130,y+2);ctx.stroke()}
+  LEAVES.forEach((l,i)=>{const x=((l.x+t*(l.s*(.8+gust*.6)))%1500)-100,y=(l.y+Math.sin(t*2+i)*40+t*l.v)%820;
+    ctx.save();ctx.translate(x,y);ctx.rotate(t*(2+i%3)+l.r);ctx.fillStyle=l.c;ctx.beginPath();ctx.moveTo(-7,0);ctx.quadraticCurveTo(0,-5,8,0);ctx.quadraticCurveTo(0,4,-7,0);ctx.fill();ctx.strokeStyle='rgba(60,40,20,.5)';ctx.lineWidth=.8;ctx.stroke();ctx.restore()});
+  if(bolt){const a=Math.min(1,bolt.t/.12);let bx=bolt.x,by=0,sd=bolt.seed;const r2=()=>{sd=(sd*9301+49297)%233280;return sd/233280};
+    ctx.lineJoin='round';const pts=[[bx,by]];for(let k=0;k<9;k++){bx+=(r2()-.5)*70;by+=34+r2()*30;pts.push([bx,by])}
+    [[7,`rgba(190,210,255,${a*.35})`],[3,`rgba(255,255,230,${a})`]].forEach(([w,col])=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke()})}
+  if(flash>0){ctx.fillStyle=`rgba(235,240,255,${Math.min(.6,flash*.6)})`;ctx.fillRect(0,0,W,H)}
+}
+const SHELTER={farm:[[115,335]],town:[[300,385],[960,385]],market:[[175,385],[505,385]],dairy:[[245,398]]};
+function startShelter(){
+  if(asleep||P.inside)return;const L=SHELTER[S.scene];if(!L)return;
+  let best=L[0];L.forEach(p=>{if(Math.abs(p[0]-P.x)<Math.abs(best[0]-P.x))best=p});
+  P.goal={x:best[0],y:best[1]};P.pending={x:-1,y:-1};
+}
 
 /* ---------- canh dong lon (farm rong) ---------- */
 const bgF=document.createElement('canvas');bgF.width=W;bgF.height=H;
@@ -1062,8 +1087,7 @@ function drawAmbient(t){
     ctx.fillStyle=f.col;ctx.strokeStyle=INK;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x-3,y,w,5,.5,0,7);ctx.ellipse(x+3,y,w,5,-.5,0,7);ctx.fill();ctx.stroke()});
   for(let k=0;k<3;k++){const x=(t*(38+k*9)+k*430)%1420-70,y=38+k*34+Math.sin(t+k)*6,fl=Math.sin(t*7+k)*7;
     line(ctx,[[x-14,y+fl],[x,y],[x+14,y+fl]],2,'#4a4038')}
-  if(rain>0){ctx.fillStyle='rgba(70,90,110,.16)';ctx.fillRect(0,0,W,H);ctx.strokeStyle='rgba(215,235,245,.75)';ctx.lineWidth=1.4;ctx.beginPath();
-    for(let i=0;i<150;i++){const x=(i*137.5+t*70)%1300,y=(i*71+t*650)%820;ctx.moveTo(x,y);ctx.lineTo(x-4,y+14)}ctx.stroke()}
+  if(rain>0)drawStorm(t);
 }
 
 /* ---------- drawing characters ---------- */
@@ -1212,15 +1236,18 @@ function step(dt){
   {const ns=Math.floor((S.day-1)/SEASON_DAYS)%4;if(ns!==season){season=ns;paintBG(ns);paintTown(ns);paintField(ns);paintDairy(ns);paintMarket(ns);toast(SEASON_PAL[ns].msg)}}
   if(fadeT>0)fadeT-=dt;
   bedtimeCheck();
+  if(flash>0)flash-=dt*3;if(bolt){bolt.t-=dt;if(bolt.t<=0)bolt=null}
   if(S.vaccT>0)S.vaccT-=dt;
   {const m=S.mill;if(m.q>0){m.t+=dt*(S.built.mill?2:1);if(m.t>=MILL_T){m.t=0;m.q--;m.out++;S.xay++}}}
-  if(rain>0){rain-=dt;if(P.inside)rain-=dt*3;if(rain<=0&&P.inside){P.inside=false;toast('Tạnh mưa rồi, ra ngoài thôi!')}}
-  else if(Math.random()<dt*.012*(season===1?3:season===3?.5:1)){rain=rand(25,45);toast('Trời mưa rồi! Mọi người đi trú — bạn bấm vào cửa nhà bên trái để trú mưa');}
+  if(rain>0){rain-=dt;
+    if(flash<=0&&Math.random()<dt*.08*rainI()){flash=1;bolt={x:rand(150,1100),t:.22,seed:Math.random()*1000};setTimeout(()=>beep(55,.9,'sawtooth',.12,28),rand(300,900))}
+    if(P.inside)rain-=dt*3;if(rain<=0&&P.inside){P.inside=false;toast('Tạnh mưa rồi, ra ngoài thôi!')}}
+  else if(Math.random()<dt*.012*(season===1?3:season===3?.5:1)){rain=rand(25,45);rainMax=rain;toast('Trời kéo mây đen, gió nổi lên! Mọi người đi trú mưa nhé');startShelter()}
   if(S.built.orchard){S.fruitT+=dt;if(S.fruitT>=30){S.fruitT=0;S.fruit=Math.min(4,S.fruit+1)}}
   S.plots.forEach(p=>{if(p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=GROW[p.st-1]){p.st++;p.t=0}}});
   S.fields.forEach(p=>{if(p.open&&p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=GROW[p.st-1]){p.st++;p.t=0}}});
   S.pigs.forEach(p=>{if(isNight()){p.w=0;return}hunger(p,dt,1/100);if(canWork(p))p.size=Math.min(1,p.size+dt/PIG_GROW);wander(p,dt,675,870,246,276,16)});
-  S.cows.forEach(b=>{if(isNight()){b.w=0;return}hunger(b,dt,1/110);if(canWork(b))b.milk=Math.min(1,b.milk+dt/35*(season===0?1.1:1));wander(b,dt,110,1000,410,520,12)});
+  S.cows.forEach(b=>{if(isNight()){b.w=0;return}hunger(b,dt,1/110);if(canWork(b))b.milk=Math.min(1,b.milk+dt/35*(season===0?1.1:1));if(rain>0){const dx=245-b.x,dy=398-b.y,m=Math.hypot(dx,dy);if(m>4){b.x+=dx/m*40*dt;b.y+=dy/m*40*dt;b.d=dx>=0?1:-1;b.w=1;b.inside=false}else{b.inside=true;b.w=0}}else{b.inside=false;wander(b,dt,110,1000,410,520,12)}});
   S.fish.forEach(f=>{hunger(f,dt,1/120,false);f.size=Math.min(1,f.size+dt/spOf(f).grow*(S.built.hut?2:1)*(f.f>.15?1:0));f.x+=f.d*(22+f.size*8)*dt;f.y+=Math.sin(T*1.3+f.x*.02)*10*dt;
     if(f.x<955){f.x=955;f.d=1}if(f.x>1110){f.x=1110;f.d=-1}f.y=Math.max(580,Math.min(642,f.y));if(Math.random()<dt*.15)f.d=-f.d});
   [[S.ducks,'duck'],[S.chicks,'chick']].forEach(([arr,k])=>arr.forEach(b=>{
@@ -1261,7 +1288,7 @@ function render(t){
     ...S.pigs.map(p=>({y:p.y,f:()=>{drawPig(p,t);badge(p,p.x,p.y-60,t)}})),
     ...BUILD.filter(b=>S.built[b.id]&&b.id!=='stall').map(b=>({y:b.y,f:()=>drawBuilding(b,t)})),
     ...S.ducks.map(b=>({y:b.y,f:()=>{drawBird(b,t,'duck');badge(b,b.x,b.y-64,t)}})),...S.chicks.map(b=>({y:b.y,f:()=>{drawBird(b,t,'chick');badge(b,b.x,b.y-64,t)}}))];
-  const AD=[A[0],{y:468,f:()=>trough(520,468,'bo')},...S.cows.map(b=>({y:b.y,f:()=>{drawCow(b,t);badge(b,b.x,b.y-100,t)}}))];
+  const AD=[A[0],{y:468,f:()=>trough(520,468,'bo')},...S.cows.filter(b=>!b.inside).map(b=>({y:b.y,f:()=>{drawCow(b,t);badge(b,b.x,b.y-100,t)}}))];
   (S.scene==='farm'?A:S.scene==='dairy'?AD:[A[0]]).sort((a,b)=>a.y-b.y).forEach(a=>a.f());
   if(S.scene==='farm')S.eggs.forEach(e=>drawEgg(e,t));
   drawAmbient(t);
@@ -1296,6 +1323,7 @@ cv.addEventListener('pointerdown',ev=>{
   if(Math.hypot(P.x-tx,P.y-ty)<45)arrive();
 });
 function act(x,y){
+  if(x===-1&&y===-1){if(rain>0){P.inside=true;P.goal=null;toast('Đang trú mưa... (bấm hoặc nhấn phím để ra ngoài)')}return}
   if(wantSleep&&x===115&&y===200){startSleep();return}
   const sc=S.scene;
   if(sc==='town'){if(x<=125&&y>=420&&y<=510)goScene('farm');else if(Math.abs(x-690)<85&&y>=440&&y<=520)goScene('market');else townAct(x,y);return}

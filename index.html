@@ -29,8 +29,13 @@
   #quest small{color:#c0502a;font-size:12px;letter-spacing:.5px}
   #quest h2{margin:0;font-size:24px;font-weight:400;line-height:1.15}
   #quest p{margin:2px 0 0;font-size:12.5px;opacity:.7}
-  #clock{right:12px;top:8px;text-align:center;font-size:12px;padding:4px 18px;transform:rotate(1deg)}
-  #clock b{display:block;font-size:22px;font-weight:400}
+  #clock{right:12px;top:8px;text-align:center;font-size:12px;padding:4px 14px 4px 6px;transform:rotate(1deg);display:flex;align-items:center;gap:8px}
+  #clock b{display:block;font-size:22px;font-weight:400;line-height:1.1}
+  #clock em{display:block;font-style:normal;font-size:12px;color:#c0502a}
+  #cropbar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:var(--paper);border:3px solid #e4dcc4;border-radius:30px;box-shadow:0 3px 0 #cdbf9b,0 6px 12px #0003;padding:5px 10px;font-size:18px}
+  #cropbar button{font:inherit;color:var(--ink);background:#fff;border:2px solid #e4dcc4;border-radius:20px;padding:4px 14px;cursor:pointer}
+  #cropbar button.on{background:#9ae06a;border-color:#4d7a3a;font-weight:700}
+  #dial{position:static;width:58px;height:58px;flex:none;cursor:default}
   .btn{position:absolute;right:14px;width:56px;height:56px;border-radius:50%;background:#fff;border:3px solid #e4dcc4;box-shadow:0 3px 0 #cdbf9b;display:grid;place-items:center;font-size:26px;cursor:pointer;padding:0;font-family:inherit;color:var(--ink)}
   .btn:active{transform:translateY(2px);box-shadow:0 1px 0 #cdbf9b}
   .shop{width:auto;height:auto;border-radius:16px;padding:6px 12px;font-size:16px;line-height:1.1;text-align:center}
@@ -82,8 +87,9 @@
   <div class="card" id="status"><b id="stName">Nghỉ tay</b><small id="stSub"></small></div>
   <div class="card" id="inv"></div>
   <div class="card" id="quest"><small id="qTag"></small><h2 id="qTitle"></h2><p id="qHint"></p></div>
-  <div class="card" id="clock">Ngày <span id="day">1</span><b id="time">06:00</b></div>
-  <button class="btn" id="bPause" style="top:72px;right:90px" title="Tạm dừng">⏸</button>
+  <div class="card" id="clock"><canvas id="dial" width="116" height="116"></canvas><div class="ct">Ngày <span id="day">1</span><b id="time">06:00</b><em id="phase"></em></div></div>
+  <div id="cropbar"><span>Trồng:</span><button data-crop="lua">🌾 Lúa</button><button data-crop="rau">🥬 Rau</button><button data-crop="qua">🍎 Quả</button></div>
+  <button class="btn" id="bPause"style="top:72px;right:90px" title="Tạm dừng">⏸</button>
   <button class="btn" id="bSound" style="top:72px;right:14px" title="Âm thanh">🔊</button>
   <button class="btn shop mi" id="bDuck" style="top:150px">🦆 Mua vịt<small>20 đồng</small></button>
   <button class="btn shop mi" id="bChick" style="top:225px">🐔 Mua gà mái<small>12 đồng</small></button>
@@ -130,10 +136,18 @@ const rand=(a,b)=>a+Math.random()*(b-a);
 
 /* ---------- state ---------- */
 const PLANT_COST=5,HARVEST=12,GROW=[10,12],DUCK_COST=20,CHICK_COST=12,MAX_PET=6;
+/* cay trong: lua (xay thanh gao), rau (nhanh), qua (lau nhung gia cao) - ban o Cua hang gao */
+const NFIELD=20;
+const CROPS={
+ lua:{n:'Lúa',icon:'🌾',grow:[10,12],yield:1,unit:'bao lúa',sow:'Gieo mạ'},
+ rau:{n:'Rau',icon:'🥬',grow:[5,6],yield:2,unit:'rổ rau',price:7,sow:'Gieo hạt rau'},
+ qua:{n:'Quả',icon:'🍎',grow:[16,18],yield:3,unit:'sọt quả',price:16,sow:'Trồng cây ăn quả'},
+};
+const cropOf=p=>CROPS[p.c]||CROPS.lua;
 const QUESTS=[
- {t:'Gieo mạ',h:'Bấm vào thửa ruộng để gieo mạ (có sẵn 3 bịch lúa giống, hết thì mua ở Chợ)',ok:s=>s.planted>=1},
- {t:'Gặt lúa',h:'Chờ lúa chín vàng rồi bấm để gặt thành bao lúa',ok:s=>s.harvested>=1},
- {t:'Xay lúa thành gạo',h:'Gặt ít nhất 3 bao lúa (máy chỉ nhận từ 3 bao), bấm nút 🗺 chọn Nhà máy rồi bấm vào máy để xay',ok:s=>s.xay>=1},
+ {t:'Gieo trồng',h:'Chọn Lúa / Rau / Quả ở thanh dưới rồi bấm vào thửa đất (có sẵn 3 bịch hạt giống, hết thì mua ở Chợ)',ok:s=>s.planted>=1},
+ {t:'Thu hoạch',h:'Chờ cây chín rồi bấm để gặt (rau mọc nhanh nhất)',ok:s=>s.harvested>=1},
+ {t:'Xay lúa thành gạo',h:'Trồng lúa, gặt ít nhất 3 bao (máy chỉ nhận từ 3 bao), bấm nút 🗺 chọn Nhà máy rồi bấm vào máy để xay',ok:s=>s.xay>=1},
  {t:'Bán gạo',h:'Lấy gạo ở máy xay rồi bán ở Cửa hàng gạo ngay bên cạnh (cùng cảnh nhà máy)',ok:s=>s.sold>=1},
  {t:'Khai hoang cánh đồng',h:'Đi sang trái ra Cánh đồng lớn, bấm ô đất hoang để mở thêm ruộng',ok:s=>s.fields.filter(f=>f.open).length>=5},
  {t:'Mua thức ăn chăn nuôi',h:'Bấm nút 🗺 chọn Chợ, vào Cửa hàng thú y mua thức ăn (đi thẳng từ nhà, không cần qua nhà máy)',ok:s=>s.k.bought>=1},
@@ -164,11 +178,13 @@ const FISH_COST=SPECIES[0].cost;
 const spOf=f=>SPECIES.find(s=>s.id===f.sp)||SPECIES[0];
 const GAO_PRICE=24,MILL_T=4,MILL_MIN=3,MILL_CAP=10;
 const PIG_COST=40,PIG_PRICE=75,MAX_PIG=4,PIG_GROW=50;
-function fresh(){return{money:40,min:360,day:1,q:0,planted:0,harvested:0,eggsGot:0,fish:[],fishCaught:0,pigs:[],pigsSold:0,built:{},fruit:0,fruitT:0,won:false,lua:0,gao:0,mill:{q:0,t:0,out:0},xay:0,sold:0,scene:'farm',fields:Array.from({length:12},(_,k)=>({st:0,t:0,open:k<4})),feed:{ga:5,vit:0,heo:0,bo:0,ca:0},med:0,vaccT:0,cows:[],sua:0,k:{bought:0,fed:0,milkSold:0,cured:0,slept:0},char:null,seed:3,fert:0,
+function fresh(){return{money:40,min:360,day:1,q:0,planted:0,harvested:0,eggsGot:0,fish:[],fishCaught:0,pigs:[],pigsSold:0,built:{},fruit:0,fruitT:0,won:false,lua:0,rau:0,qua:0,crop:'lua',gao:0,mill:{q:0,t:0,out:0},xay:0,sold:0,scene:'farm',fields:Array.from({length:NFIELD},(_,k)=>({st:0,t:0,open:k<4})),feed:{ga:5,vit:0,heo:0,bo:0,ca:0},med:0,vaccT:0,cows:[],sua:0,k:{bought:0,fed:0,milkSold:0,cured:0,slept:0},char:null,seed:3,fert:0,
   plots:[{st:0,t:0},{st:0,t:0},{st:0,t:0}],
   ducks:[],chicks:[{x:520,y:440,d:1,w:0,m:true,f:.8,egg:99},{x:900,y:425,d:-1,w:0,m:false,f:.8,egg:rand(10,20)}],eggs:[]};}
 let S=fresh();
 try{const j=JSON.parse(localStorage.getItem('langque_v7'));if(j&&j.plots&&j.fish&&j.pigs&&j.built&&j.mill&&j.fields&&j.feed&&j.cows&&j.k)S=j;}catch(e){}
+while(S.fields.length<NFIELD)S.fields.push({st:0,t:0,open:false});
+S.rau=S.rau||0;S.qua=S.qua||0;if(!CROPS[S.crop])S.crop='lua';
 function save(){try{localStorage.setItem('langque_v7',JSON.stringify(S))}catch(e){}}
 setInterval(save,5000);addEventListener('beforeunload',save);
 
@@ -247,10 +263,21 @@ function leafClusterOld(c,x,y,r,col,R){
   for(let i=0;i<Math.round(r*.45);i++){const a=R()*Math.PI*2,d=Math.sqrt(R())*r*.85;c.globalAlpha=.22;c.fillStyle=R()<.55?hi:lo;c.beginPath();c.ellipse(x+Math.cos(a)*d,y+Math.sin(a)*d*.85,3.2,1.5,R()*3,0,7);c.fill()}
   c.globalAlpha=1;
 }
-const SEASON_DAYS=2;
+const SEASON_DAYS=1;
+/* bang mau bau troi theo gio (dung cho o tron ngay/dem) */
+const SKYK=[[0,[14,20,52]],[4.5,[22,30,72]],[5.5,[238,150,92]],[7,[170,214,240]],[11,[150,212,255]],[12.5,[196,234,255]],[14,[150,212,255]],[17,[244,204,122]],[18.5,[232,120,84]],[20,[40,44,92]],[24,[14,20,52]]];
+function skyRGB(h){for(let i=1;i<SKYK.length;i++){if(h<=SKYK[i][0]){const a=SKYK[i-1],b=SKYK[i],u=(h-a[0])/(b[0]-a[0]);return a[1].map((v,k)=>Math.round(v+(b[1][k]-v)*u))}}return SKYK[0][1]}
+function phaseName(h){return h<4.5?'Đêm khuya':h<5.5?'Sắp sáng':h<7?'Bình minh':h<10.5?'Buổi sáng':h<13.5?'Buổi trưa':h<16.5?'Buổi chiều':h<18?'Sắp tối':h<19.5?'Hoàng hôn':h<21?'Trời tối':'Ban đêm'}
+function cvar(PL,sn,k){return sn===2?['#d99a3a','#c4602a','#e8bc4a','#b8742a'][k%4]:sn===0?shade(PL.canopy,((k%3)-1)*.08):PL.canopy}
+/* la/canh hoa roi duoi goc cay */
+function treeLitter(c,x,y,rx,sn,R){
+  const cols=sn===0?['#f8bfd0','#fff0f4']:sn===2?['#d9822a','#c4561f','#e6b040','#a8641f']:sn===3?['#9a8a64','#8a7a58','#b3a37c']:null;
+  if(!cols)return;const n=sn===3?14:34;
+  for(let i=0;i<n;i++){const a=R()*7,d=Math.sqrt(R());c.fillStyle=cols[i%cols.length];c.beginPath();c.ellipse(x+Math.cos(a)*d*rx,y+Math.sin(a)*d*rx*.13,sn===0?3:4.5,sn===0?1.8:2.3,R()*3,0,7);c.fill()}
+}
 const SEASON_PAL=[
  {n:'Xuân',sky:['#cfeee0','#f4f6dc'],band:'#b8dba0',hill:'#c0e0a4',g1:'#dcc794',g2:'#d3b87f',canopy:'#69b852',leaf:'#b0de74',fruit:null,blossom:'#f7b6c8',tuft:'#72b252',flow:.3,strip:'#6eb040',strip2:'#86c258',bamboo:'#a2cc8c',river:['#78b0aa','#6fa8a4'],tint:'rgba(200,255,200,.05)',msg:'Sang xuân! Hoa nở, gà vịt đẻ nhanh hơn'},
- {n:'Hạ',sky:['#bfe3f2','#f2f4dc'],band:'#a8cf88',hill:'#b4d890',g1:'#e0c48a',g2:'#d6b378',canopy:'#4f9a3c',leaf:'#8cc558',fruit:'#d9b44a',blossom:null,tuft:'#5f9a40',flow:.12,strip:'#5f9a34',strip2:'#74b048',bamboo:'#94c27c',river:['#6fb4b4','#5fa4aa'],tint:'rgba(255,235,130,.07)',msg:'Sang hạ! Nắng nóng, hay có mưa, lúa lớn nhanh'},
+ {n:'Hạ',sky:['#bfe3f2','#f2f4dc'],band:'#a8cf88',hill:'#b4d890',g1:'#e0c48a',g2:'#d6b378',canopy:'#4f9a3c',leaf:'#8cc558',fruit:'#d9b44a',blossom:null,tuft:'#5f9a40',flow:.12,strip:'#5f9a34',strip2:'#74b048',bamboo:'#94c27c',river:['#6fb4b4','#5fa4aa'],tint:'rgba(255,235,130,.07)',msg:'Sang hạ (mùa mưa)! Lúa lớn nhanh, nhưng gà vịt dễ bệnh - nhớ tiêm vắc-xin, có sẵn thuốc'},
  {n:'Thu',sky:['#e9dcc2','#f5ead0'],band:'#d6c78a',hill:'#cdbd80',g1:'#d9b684',g2:'#cba26e',canopy:'#d99a3a',leaf:'#efc060',fruit:'#c86a2a',blossom:null,tuft:'#b8963c',flow:.04,strip:'#a89a3a',strip2:'#c4b450',bamboo:'#b8c47a',river:['#7fa8a0','#6e9a96'],tint:'rgba(255,150,60,.12)',msg:'Sang thu! Lúa vàng, gặt lúa được giá hơn 20%'},
  {n:'Đông',sky:['#cfd8de','#e9edee'],band:'#b2bfae',hill:'#bcc9b8',g1:'#cdbd9c',g2:'#c2b08e',canopy:'#8a9a78',leaf:'#a6b496',fruit:null,blossom:null,tuft:'#8a9a6a',flow:0,strip:'#7e9462',strip2:'#93a874',bamboo:'#9db08c',river:['#8aa8aa','#7a9a9e'],tint:'rgba(205,225,255,.16)',msg:'Sang đông! Se lạnh, lúa lớn chậm hơn'},
 ];
@@ -293,10 +320,11 @@ function paintBG(sn){
     [[520,152,24],[654,142,24],[560,122,22],[600,170,20],[500,170,18],[625,100,18]].forEach(([x,y,r])=>leafCluster(c,x,y,r,PL.canopy,R));
     [[520,152,490,130],[520,152,500,176],[654,142,690,120],[654,142,676,176],[560,122,540,96],[560,122,590,92]].forEach(([x,y,ex,ey])=>{c.beginPath();c.moveTo(x,y);c.quadraticCurveTo((x+ex)/2,(y+ey)/2-6,ex,ey);c.lineWidth=3;c.strokeStyle='#6a4e32';c.stroke()});
   }else{
-    [[500,130,62],[620,100,68],[560,72,58],[664,152,54],[470,176,44],[590,160,58]].forEach(([x,y,r])=>leafCluster(c,x,y,r,shade(PL.canopy,-.12),R));
-    [[522,118,54],[612,92,58],[562,150,56],[648,140,46],[482,162,36],[578,96,44]].forEach(([x,y,r])=>leafCluster(c,x,y,r,PL.canopy,R));
-    [[548,126,34],[604,128,36],[524,152,28],[634,162,26],[572,172,28],[588,82,28],[500,118,26]].forEach(([x,y,r])=>leafCluster(c,x,y,r,shade(PL.canopy,.12),R));
+    [[500,130,62],[620,100,68],[560,72,58],[664,152,54],[470,176,44],[590,160,58]].forEach(([x,y,r],i)=>leafCluster(c,x,y,r,shade(cvar(PL,sn,i),-.12),R));
+    [[522,118,54],[612,92,58],[562,150,56],[648,140,46],[482,162,36],[578,96,44]].forEach(([x,y,r],i)=>leafCluster(c,x,y,r,cvar(PL,sn,i+1),R));
+    [[548,126,34],[604,128,36],[524,152,28],[634,162,26],[572,172,28],[588,82,28],[500,118,26]].forEach(([x,y,r],i)=>leafCluster(c,x,y,r,shade(cvar(PL,sn,i+2),.12),R));
   }
+  treeLitter(c,585,298,150,sn,R);
   if(PL.fruit)[[590,138],[535,130],[640,112],[560,160],[610,96]].forEach(([x,y])=>{c.beginPath();c.moveTo(x,y-9);c.lineTo(x,y-5);c.strokeStyle='#4a6a2a';c.lineWidth=1.6;c.stroke();fillP(c,()=>{c.ellipse(x,y,5.5,8,.3,0,7)},lg(c,x-5,y-8,x+5,y+8,shade(PL.fruit,.25),shade(PL.fruit,-.15)),1.2)});
   if(PL.blossom)for(let i=0;i<26;i++){const a=R()*Math.PI*2,d=Math.sqrt(R())*88,x=570+Math.cos(a)*d*1.2,y=125+Math.sin(a)*d*.8;for(let k=0;k<5;k++){const aa=k/5*Math.PI*2;c.fillStyle=PL.blossom;c.beginPath();c.ellipse(x+Math.cos(aa)*3,y+Math.sin(aa)*3,2.6,1.8,aa,0,7);c.fill()}c.fillStyle='#f2c24a';c.beginPath();c.arc(x,y,1.3,0,7);c.fill()}
   // coconut palms
@@ -477,7 +505,7 @@ function drawTown(t){
   else if(S.lua>0)msg='Cần từ '+MILL_MIN+' bao lúa mới xay (đang có '+S.lua+')';
   else if(run)msg='Đang xay... còn '+m.q+' bao';
   if(msg)tagText(mx,by+34,msg);
-  let m2=null;if(S.gao>0)m2='Bấm bán '+S.gao+' bao gạo ('+price+' đ/bao)';else if(S.lua>0||m.q>0||m.out>0)m2='Cần có gạo mới bán được';
+  let m2=null;if(S.gao>0||S.rau>0||S.qua>0)m2='Bấm để bán: '+[S.gao&&S.gao+' gạo',S.rau&&S.rau+' rau',S.qua&&S.qua+' quả'].filter(Boolean).join(' · ');else if(S.lua>0||m.q>0||m.out>0)m2='Cần có gạo mới bán được';
   if(m2)tagText(960,by+34,m2);
   edgeSign(52,452,'◀ Nông trại');edgeSign(690,470,'Chợ ▶');
 }
@@ -492,8 +520,13 @@ function millAct(){
   pickGoal();
 }
 function shopAct(){
-  if(S.gao>0){const n=S.gao,price=Math.round(GAO_PRICE*(season===2?1.2:1)),earn=sell(n*price);S.gao=0;S.sold+=n;addMoney(earn,960,300);toast(`Bán ${n} bao gạo được ${earn} đồng`);sCoin()}
-  else toast(S.lua>0||S.mill.q>0||S.mill.out>0?'Chưa có gạo! Xay lúa ở nhà máy trước đã':'Chưa có gạo để bán');
+  if(S.gao>0||S.rau>0||S.qua>0){
+    const price=Math.round(GAO_PRICE*(season===2?1.2:1)),parts=[];let sum=0;
+    if(S.gao>0){const n=S.gao;sum+=n*price;S.sold+=n;S.gao=0;parts.push(n+' bao gạo')}
+    if(S.rau>0){const n=S.rau;sum+=n*CROPS.rau.price;S.rau=0;parts.push(n+' rổ rau')}
+    if(S.qua>0){const n=S.qua;sum+=n*CROPS.qua.price;S.qua=0;parts.push(n+' sọt quả')}
+    const earn=sell(sum);addMoney(earn,960,300);toast(`Bán ${parts.join(', ')} được ${earn} đồng`);sCoin()}
+  else toast(S.lua>0||S.mill.q>0||S.mill.out>0?'Chưa có gạo! Xay lúa ở nhà máy trước đã':'Chưa có gì để bán: mang gạo, rau hoặc quả tới đây');
   pickGoal();
 }
 /* ---------- thuc an / benh / bo sua / cho / ngu / tao nhan vat ---------- */
@@ -509,16 +542,18 @@ const AGRO=[
  {id:'vac',n:'Vắc-xin phòng bệnh',d:'Cả trại không mắc bệnh trong 4 phút',cost:40,qty:1},
 ];
 const AGRI=[
- {id:'seed',n:'Lúa giống',d:'Một bịch đủ gieo 1 thửa ruộng',cost:5,qty:1},
- {id:'seed5',n:'Lúa giống (combo 5 bịch)',d:'Rẻ hơn mua lẻ',cost:20,qty:5},
+ {id:'seed',n:'Hạt giống (lúa, rau, quả)',d:'Một bịch đủ trồng 1 thửa, chọn loại cây ở thanh dưới',cost:5,qty:1},
+ {id:'seed5',n:'Hạt giống (combo 5 bịch)',d:'Rẻ hơn mua lẻ',cost:20,qty:5},
  {id:'fert',n:'Phân bón NPK',d:'Bón cho ruộng đang lớn: lúa lớn nhanh hơn 60%',cost:12,qty:1},
 ];
 const hourNow=()=>(S.min/60)%24;
 const isNight=()=>{const h=hourNow();return h>=21||h<5.5};
 let asleep=false,wantSleep=false,bedDay=-1,creatorOpen=false;
-function hunger(b,dt,rate,canSick=true){
+/* gia cam (ga, vit) mua mua (ha) va luc troi mua de mac benh hon */
+const sickMul=poul=>poul?(season===1?3:1)*(rain>0?2.5:1):1;
+function hunger(b,dt,rate,canSick=true,poul=false){
   if(b.f===undefined)b.f=1;b.f=Math.max(0,b.f-dt*rate);
-  if(canSick&&!b.sick&&S.vaccT<=0&&Math.random()<dt*(b.f<.25?.004:.0004)){b.sick=true;float(b.x,b.y-60,'Bị bệnh!','#ff9a8a')}
+  if(canSick&&!b.sick&&S.vaccT<=0&&Math.random()<dt*(b.f<.25?.004:.0004)*sickMul(poul)){b.sick=true;float(b.x,b.y-60,'Bị bệnh!','#ff9a8a')}
 }
 const canWork=b=>(b.f===undefined||b.f>.15)&&!b.sick;
 function careAnimal(b,kind,label){
@@ -579,7 +614,8 @@ function marketAct(x,y){
 function autoChores(){
   const r=[];
   const eg=S.eggs.length;if(eg){let v=0;S.eggs.forEach(e=>{v+=sell(e.v);S.eggsGot++});S.money+=v;S.eggs=[];r.push(`nhặt ${eg} trứng (+${v} đồng)`)}
-  let lua=0;[...S.plots,...S.fields.filter(f=>f.open)].forEach(p=>{if(p.st===3){p.st=0;p.t=0;p.fert=false;S.harvested++;lua+=1+(S.built.barn?1:0)}});if(lua){S.lua+=lua;r.push(`gặt ${lua} bao lúa`)}
+  const got={lua:0,rau:0,qua:0};[...S.plots,...S.fields.filter(f=>f.open)].forEach(p=>{if(p.st===3){const k=p.c||'lua';p.st=0;p.t=0;p.fert=false;S.harvested++;got[k]+=CROPS[k].yield+(S.built.barn?1:0)}});
+  for(const k in got)if(got[k]){S[k]+=got[k];r.push(`gặt ${got[k]} ${CROPS[k].unit}`)}
   let milk=0;S.cows.forEach(b=>{if(b.milk>=1){b.milk=0;milk++}});if(milk){S.sua+=milk;r.push(`vắt ${milk} chai sữa`)}
   if(S.fruit>0){const v=sell(6*S.fruit);S.money+=v;r.push(`hái ${S.fruit} xoài (+${v} đồng)`);S.fruit=0}
   if(S.mill.out>0){S.gao+=S.mill.out;r.push(`lấy ${S.mill.out} bao gạo ở máy xay`);S.mill.out=0}
@@ -798,12 +834,12 @@ function startShelter(){
 
 /* ---------- canh dong lon (farm rong) ---------- */
 const bgF=document.createElement('canvas');bgF.width=W;bgF.height=H;
-const FP=Array.from({length:12},(_,k)=>({x0:30+(k%4)*255,x1:30+(k%4)*255+230,y0:320+Math.floor(k/4)*130,y1:320+Math.floor(k/4)*130+85}));
+const FP=Array.from({length:NFIELD},(_,k)=>({x0:34+(k%5)*188,x1:34+(k%5)*188+176,y0:316+Math.floor(k/5)*100,y1:316+Math.floor(k/5)*100+74}));
 const fieldCost=()=>30+(S.fields.filter(f=>f.open).length-4)*10;
 function workPlot(p,x,y){
-  if(p.st===0){if(S.seed<=0){toast('Hết lúa giống! Mua ở Chợ (cửa hàng vật tư nông nghiệp)');return}S.seed--;p.st=1;p.t=0;p.fert=false;S.planted++;float(x,y,'Gieo mạ','#fff');sPlant();pickGoal()}
-  else if(p.st===3){p.st=0;p.t=0;p.fert=false;S.harvested++;const n=1+(S.built.barn?1:0);S.lua+=n;float(x,y,'+'+n+' bao lúa','#ffe27a');sCoin();pickGoal()}
-  else if(!p.fert){if(S.fert>0){S.fert--;p.fert=true;float(x,y,'Bón phân!','#9ae06a');sPlant()}else toast('Ruộng đang lớn. Mua phân bón ở Chợ (vật tư nông nghiệp) để lúa lớn nhanh hơn')}
+  if(p.st===0){if(S.seed<=0){toast('Hết hạt giống! Mua ở Chợ (cửa hàng vật tư nông nghiệp)');return}const c=CROPS[S.crop];S.seed--;p.c=S.crop;p.st=1;p.t=0;p.fert=false;S.planted++;float(x,y,c.sow,'#fff');sPlant();pickGoal()}
+  else if(p.st===3){const k=p.c||'lua',c=CROPS[k],n=c.yield+(S.built.barn?1:0);p.st=0;p.t=0;p.fert=false;S.harvested++;S[k]+=n;float(x,y,'+'+n+' '+c.unit,'#ffe27a');sCoin();pickGoal()}
+  else if(!p.fert){if(S.fert>0){S.fert--;p.fert=true;float(x,y,'Bón phân!','#9ae06a');sPlant()}else toast('Cây đang lớn. Mua phân bón ở Chợ (vật tư nông nghiệp) để cây lớn nhanh hơn')}
 }
 function fieldAct(x,y){
   const k=FP.findIndex(r=>x>=r.x0-8&&x<=r.x1+8&&y>=r.y0-8&&y<=r.y1+8);if(k<0)return;
@@ -820,10 +856,11 @@ function treeAt(c,x,by,s,PL,sn,R){
   [[-9,-92,-65,-146],[7,-98,69,-156],[-3,-108,-25,-176]].forEach(([bx,b2,ex,ey])=>{c.beginPath();c.moveTo(bx,b2);c.quadraticCurveTo((bx+ex)/2,(b2+ey)/2+14,ex,ey);c.lineWidth=12;c.strokeStyle=OL;c.stroke();c.lineWidth=8.5;c.strokeStyle='#7e5c3a';c.stroke()});
   if(sn===3){[[-65,-146,24],[69,-156,24],[-25,-176,22],[15,-128,20],[-85,-128,18],[40,-198,18]].forEach(([a,b,r])=>leafCluster(c,a,b,r,PL.canopy,R))}
   else{
-    [[-85,-168,62],[35,-198,68],[-25,-226,58],[79,-146,54],[-115,-122,44],[5,-138,58]].forEach(([a,b,r])=>leafCluster(c,a,b,r,shade(PL.canopy,-.12),R));
-    [[-63,-180,54],[27,-206,58],[-23,-148,56],[63,-158,46],[-103,-136,36],[-7,-202,44]].forEach(([a,b,r])=>leafCluster(c,a,b,r,PL.canopy,R));
-    [[-37,-172,34],[19,-170,36],[-61,-146,28],[49,-136,26],[-13,-126,28],[3,-216,28],[-85,-180,26]].forEach(([a,b,r])=>leafCluster(c,a,b,r,shade(PL.canopy,.12),R));
+    [[-85,-168,62],[35,-198,68],[-25,-226,58],[79,-146,54],[-115,-122,44],[5,-138,58]].forEach(([a,b,r],i)=>leafCluster(c,a,b,r,shade(cvar(PL,sn,i),-.12),R));
+    [[-63,-180,54],[27,-206,58],[-23,-148,56],[63,-158,46],[-103,-136,36],[-7,-202,44]].forEach(([a,b,r],i)=>leafCluster(c,a,b,r,cvar(PL,sn,i+1),R));
+    [[-37,-172,34],[19,-170,36],[-61,-146,28],[49,-136,26],[-13,-126,28],[3,-216,28],[-85,-180,26]].forEach(([a,b,r],i)=>leafCluster(c,a,b,r,shade(cvar(PL,sn,i+2),.12),R));
   }
+  treeLitter(c,0,2,140,sn,R);
   if(PL.fruit)[[5,-160],[-50,-168],[55,-186],[-25,-138],[25,-202]].forEach(([a,b])=>{c.beginPath();c.moveTo(a,b-9);c.lineTo(a,b-5);c.strokeStyle='#4a6a2a';c.lineWidth=1.6;c.stroke();fillP(c,()=>{c.ellipse(a,b,5.5,8,.3,0,7)},lg(c,a-5,b-8,a+5,b+8,shade(PL.fruit,.25),shade(PL.fruit,-.15)),1.2)});
   if(PL.blossom)for(let i=0;i<22;i++){const ang=R()*Math.PI*2,d=Math.sqrt(R())*88,a=-15+Math.cos(ang)*d*1.2,b=-173+Math.sin(ang)*d*.8;for(let k=0;k<5;k++){const aa=k/5*Math.PI*2;c.fillStyle=PL.blossom;c.beginPath();c.ellipse(a+Math.cos(aa)*3,b+Math.sin(aa)*3,2.6,1.8,aa,0,7);c.fill()}c.fillStyle='#f2c24a';c.beginPath();c.arc(a,b,1.3,0,7);c.fill()}
   c.restore();
@@ -836,8 +873,8 @@ function paintField(sn){
   for(let x=0;x<W;x+=34)leafCluster(c,x+R()*10,262+R()*10,26+R()*8,shade(PL.canopy,-.15),R);
   g=c.createLinearGradient(0,290,0,800);g.addColorStop(0,PL.strip);g.addColorStop(1,shade(PL.strip,-.18));c.fillStyle=g;c.fillRect(0,288,W,512);
   for(let i=0;i<260;i++){const x=R()*W,y=292+R()*500;line(c,[[x,y],[x-3,y-8]],1.3,PL.tuft);line(c,[[x,y],[x+3,y-9]],1.3,PL.tuft)}
-  c.fillStyle='#c9a46e';c.fillRect(28,308,1012,372);c.strokeStyle='#a8844e';c.lineWidth=2;c.strokeRect(28,308,1012,372);
-  for(let i=0;i<110;i++)blob(c,40+R()*990,314+R()*360,1.2+R()*2,.9+R()*1.2,'#9a8a70',1);
+  c.fillStyle='#c9a46e';c.fillRect(24,304,948,402);c.strokeStyle='#a8844e';c.lineWidth=2;c.strokeRect(24,304,948,402);
+  for(let i=0;i<110;i++)blob(c,36+R()*924,310+R()*390,1.2+R()*2,.9+R()*1.2,'#9a8a70',1);
   // dat hoang duoi moi o (se duoc ve de len khi khai hoang)
   FP.forEach((r,k)=>{
     c.fillStyle=lg(c,0,r.y0,0,r.y1,'#a08a5a','#7a6640');c.fillRect(r.x0,r.y0,r.x1-r.x0,r.y1-r.y0);
@@ -847,9 +884,9 @@ function paintField(sn){
   });
   // cay lon xung quanh
   treeAt(c,150,300,.8,PL,sn,R);treeAt(c,1120,300,.75,PL,sn,R);treeAt(c,640,296,.5,PL,sn,R);
-  treeAt(c,70,790,.95,PL,sn,R);treeAt(c,1210,790,.9,PL,sn,R);
+  treeAt(c,1060,792,.8,PL,sn,R);treeAt(c,1210,790,.9,PL,sn,R);
   // bu nhin
-  (function(){const x=620,y=700;line(c,[[x,y+50],[x,y-30]],5,'#6a4a2a');line(c,[[x-28,y-6],[x+28,y-6]],5,'#6a4a2a');
+  (function(){const x=1040,y=640;line(c,[[x,y+50],[x,y-30]],5,'#6a4a2a');line(c,[[x-28,y-6],[x+28,y-6]],5,'#6a4a2a');
     fillP(c,()=>{c.moveTo(x-12,y-6);c.lineTo(x-14,y+22);c.lineTo(x+14,y+22);c.lineTo(x+12,y-6);c.closePath()},'#5a7aa8',1.6);
     for(let i=-2;i<=2;i++)line(c,[[x+i*10,y+20],[x+i*11,y+34]],2,'#d8b860');
     ell(c,x,y-26,8,9,'#e8d4a8',0,1.6);fillP(c,()=>{c.moveTo(x-22,y-30);c.lineTo(x,y-52);c.lineTo(x+22,y-30);c.closePath()},'#e8d49a',1.6)})();
@@ -860,8 +897,8 @@ function paintField(sn){
 function drawField(t){
   FP.forEach((r,k)=>{const f=S.fields[k];
     if(f.open)paddy(f,r.x0,r.x1,r.y0,r.y1,t,k+20);
-    else tagText((r.x0+r.x1)/2,(r.y0+r.y1)/2+6,'Đất hoang — khai hoang '+fieldCost()+' đồng',18)});
-  edgeSign(1085,452,'Về sân ▶');edgeSign(84,700,'◀ Trại bò sữa');
+    else tagText((r.x0+r.x1)/2,(r.y0+r.y1)/2+6,'Đất hoang · '+fieldCost()+' đồng',16)});
+  edgeSign(1085,452,'Về sân ▶');edgeSign(90,722,'◀ Trại bò sữa');
 }
 function townAct(x,y){
   if(x>=90&&x<=540&&y>=40&&y<=372){millAct();return}
@@ -873,15 +910,40 @@ const PX=[[0,430],[460,890],[920,1280]],PY=[562,656];
 function hsh(a,b){const v=Math.sin(a*127.1+b*311.7)*43758.5453;return v-Math.floor(v)}
 function drawPlot(i,t){const [px0,px1]=PX[i];paddy(S.plots[i],px0+(i?6:0),px1-6,PY[0],PY[1],t,i)}
 function paddy(p,x0,x1,y0,y1,t,i){
-  const w=x1-x0,h=y1-y0,c=ctx;
-  c.fillStyle=lg(c,0,y0,0,y1,p.st===0?'#8c7c54':'#5a8a68',p.st===0?'#5e4e32':'#33604a');c.fillRect(x0,y0,w,h);
-  c.fillStyle=lg(c,0,y0,0,y1,'rgba(205,228,240,.5)','rgba(205,228,240,0)');c.fillRect(x0,y0,w,h*.7);
+  const w=x1-x0,h=y1-y0,c=ctx,cr=p.c||'lua',dry=cr!=='lua'&&p.st>0;
+  c.fillStyle=lg(c,0,y0,0,y1,dry?'#86683f':p.st===0?'#8c7c54':'#5a8a68',dry?'#5a4228':p.st===0?'#5e4e32':'#33604a');c.fillRect(x0,y0,w,h);
+  if(!dry){c.fillStyle=lg(c,0,y0,0,y1,'rgba(205,228,240,.5)','rgba(205,228,240,0)');c.fillRect(x0,y0,w,h*.7)}
   c.strokeStyle='rgba(255,255,255,.35)';c.lineWidth=1.2;
-  for(let k=0;k<7;k++){const sx=x0+20+((k*61+t*9+hsh(k,i)*100)%(w-50)),sy=y0+10+(k*29)%(h-20);c.beginPath();c.moveTo(sx,sy);c.quadraticCurveTo(sx+8,sy-2.5,sx+16,sy);c.stroke()}
+  for(let k=0;k<(dry?0:7);k++){const sx=x0+20+((k*61+t*9+hsh(k,i)*100)%(w-50)),sy=y0+10+(k*29)%(h-20);c.beginPath();c.moveTo(sx,sy);c.quadraticCurveTo(sx+8,sy-2.5,sx+16,sy);c.stroke()}
   if(p.st===0){
     c.strokeStyle='rgba(40,30,15,.28)';c.lineWidth=1.6;
     for(let k=0;k<5;k++){const yy=y0+14+k*16;c.beginPath();c.moveTo(x0+4,yy);for(let x=x0+4;x<x1-4;x+=30)c.quadraticCurveTo(x+15,yy+3*Math.sin(x*.1+k),x+30,yy);c.stroke()}
     for(let k=0;k<24;k++){c.fillStyle='rgba(60,45,25,.5)';c.beginPath();c.ellipse(x0+10+hsh(k,i+3)*(w-20),y0+8+hsh(k,i+9)*(h-16),3+hsh(k,2)*3,1.4+hsh(k,4),0,0,7);c.fill()}
+  }else if(cr==='rau'){
+    const st=p.st,s=st===1?.45:st===2?.8:1.1,rows=3;
+    c.strokeStyle='rgba(40,25,10,.3)';c.lineWidth=2;for(let r=0;r<rows;r++){const yy=y0+h*(.28+r*.3);c.beginPath();c.moveTo(x0+4,yy+4);c.lineTo(x1-4,yy+4);c.stroke()}
+    for(let r=0;r<rows;r++){const yy=y0+h*(.28+r*.3),sc=.85+r*.12,sp=26;
+      for(let cx=x0+16+(r%2)*sp/2;cx<x1-12;cx+=sp){
+        const hv=hsh(cx,r+i),sw=Math.sin(t*1.6+cx*.05+r)*1.4,ss=s*sc*(.9+hv*.2),head=st===3&&hv>.5;
+        c.fillStyle='rgba(15,30,10,.3)';c.beginPath();c.ellipse(cx,yy+3,10*ss,3*ss,0,0,7);c.fill();
+        const n=st===1?3:6;
+        for(let j=0;j<n;j++){const ang=-Math.PI/2+(j-(n-1)/2)*(st===1?.7:.52)+(hsh(j,cx)-.5)*.2+sw*.02;
+          leaf(c,cx,yy,ang,(11+hsh(j,cx)*4)*ss*1.5,3.6*ss+.6,head?(j%2?'#8cc860':'#a4d878'):(j%2?'#4e9a3a':'#68b648'),'rgba(25,70,25,.55)')}
+        if(head){c.fillStyle='#c4e8a0';c.strokeStyle='rgba(25,70,25,.6)';c.lineWidth=1;c.beginPath();c.ellipse(cx,yy-8*ss,8*ss,7*ss,0,0,7);c.fill();c.stroke()}
+        else if(st===3){c.fillStyle='#f08a2a';c.beginPath();c.ellipse(cx+(hv-.5)*8,yy-3,2.4,3.4,0,0,7);c.fill()}
+      }}
+  }else if(cr==='qua'){
+    const st=p.st,rows=2;
+    for(let r=0;r<rows;r++){const yy=y0+h*(.5+r*.38),sc=.85+r*.18,sp=58;
+      for(let cx=x0+30+(r%2)*sp/2;cx<x1-14;cx+=sp){
+        const hv=hsh(cx,r+i),sw=Math.sin(t*1.5+cx*.05+r)*1.6,ts=st===1?.35:st===2?.7:1;
+        c.fillStyle='rgba(15,30,10,.3)';c.beginPath();c.ellipse(cx,yy+2,16*ts*sc,4*ts*sc,0,0,7);c.fill();
+        c.strokeStyle='#6a4a2a';c.lineWidth=(st===1?2:4)*sc;c.lineCap='round';c.beginPath();c.moveTo(cx,yy);c.lineTo(cx+sw*.3,yy-(10+22*ts)*sc);c.stroke();
+        const cy=yy-(14+26*ts)*sc,cw=(10+16*ts)*sc;
+        [[-.5,.1,.8,'#3f8a34'],[.5,.1,.8,'#3f8a34'],[0,-.35,.95,'#4f9a3c'],[-.2,0,.7,'#68b648'],[.25,-.1,.6,'#78c456']].forEach(([ox,oy,k,col])=>{c.fillStyle=col;c.beginPath();c.ellipse(cx+ox*cw+sw*.5,cy+oy*cw,cw*.62*k,cw*.5*k,0,0,7);c.fill()});
+        if(st===3)for(let f=0;f<4;f++){const fx=cx+(f-1.5)*cw*.5+sw*.5,fy=cy+((f*37+hv*10)%7-2)*cw*.12;c.fillStyle=f%2?'#e8462a':'#f0902a';c.strokeStyle='rgba(90,30,10,.6)';c.lineWidth=1;c.beginPath();c.arc(fx,fy,4.6*sc,0,7);c.fill();c.stroke()}
+        if(st===2&&hv>.6){c.fillStyle='#fff0f4';for(let f=0;f<3;f++){c.beginPath();c.arc(cx+(f-1)*cw*.5,cy-cw*.1,2,0,7);c.fill()}}
+      }}
   }else{
     const rows=4,st=p.st,baseH=st===1?8:st===2?20:30;
     for(let r=0;r<rows;r++){
@@ -907,11 +969,12 @@ function paddy(p,x0,x1,y0,y1,t,i){
   bund(x0-5,y0-7,w+10,9);bund(x0-5,y1-2,w+10,9);bund(x0-5,y0-7,7,h+16);bund(x1-2,y0-7,7,h+16);
   for(let k=0;k<Math.floor(w/9);k++){const gx=x0+k*9+hsh(k,i)*6,gy=y0-6;c.strokeStyle=hsh(k,3)<.5?'#5a9a3a':'#78b44a';c.lineWidth=1.3;c.beginPath();c.moveTo(gx,gy+2);c.lineTo(gx-2+hsh(k,5)*2,gy-5-hsh(k,7)*4);c.moveTo(gx+2,gy+2);c.lineTo(gx+3,gy-6-hsh(k,9)*4);c.stroke()}
   if(p.st>0){
-    if(p.st<3){const need=GROW[p.st-1],pc=p.t/need,bx=(x0+x1)/2-40;
+    if(p.st<3){const need=cropOf(p).grow[p.st-1],pc=p.t/need,bx=(x0+x1)/2-40;
       c.fillStyle='#fffdf5cc';c.fillRect(bx,y1-12,80,8);c.fillStyle='#6fa24c';c.fillRect(bx,y1-12,80*pc,8);c.strokeStyle=INK;c.lineWidth=1.5;c.strokeRect(bx,y1-12,80,8)}
-    else{c.font="20px Itim";c.textAlign='center';c.fillStyle='#fffdf5';c.strokeStyle=INK;c.lineWidth=3;const ty=y0+8+Math.sin(t*4)*3;c.strokeText('Chín rồi! Bấm gặt',(x0+x1)/2,ty+12);c.fillText('Chín rồi! Bấm gặt',(x0+x1)/2,ty+12)}
+    else{c.font="17px Itim";c.textAlign='center';c.fillStyle='#fffdf5';c.strokeStyle=INK;c.lineWidth=3;const ty=y0+8+Math.sin(t*4)*3;c.strokeText('Chín rồi! Bấm gặt',(x0+x1)/2,ty+12);c.fillText('Chín rồi! Bấm gặt',(x0+x1)/2,ty+12)}
   }else{
-    c.font="18px Itim";c.textAlign='center';c.fillStyle='#fffdf5cc';c.strokeStyle='rgba(60,45,25,.7)';c.lineWidth=3;c.strokeText('Ruộng trống — bấm để gieo mạ',(x0+x1)/2,(y0+y1)/2+6);c.fillText('Ruộng trống — bấm để gieo mạ',(x0+x1)/2,(y0+y1)/2+6);
+    const em='Đất trống — bấm để '+(S.crop==='lua'?'gieo mạ':S.crop==='rau'?'gieo rau':'trồng quả');
+    c.font="15px Itim";c.textAlign='center';c.fillStyle='#fffdf5cc';c.strokeStyle='rgba(60,45,25,.7)';c.lineWidth=3;c.strokeText(em,(x0+x1)/2,(y0+y1)/2+6);c.fillText(em,(x0+x1)/2,(y0+y1)/2+6);
   }
 }
 
@@ -1060,7 +1123,7 @@ let panelSig='',panelMode='build';
 function openPanel(mode){panelMode=mode;panelSig='';$('ptitle').textContent=({go:'Đi đâu?',fish:'Chọn giống cá thả đìa',agro:'Cửa hàng thú y · thức ăn chăn nuôi',agri:'Vật tư nông nghiệp'})[mode]||'🏗 Xây dựng làng';$('panel').style.display='block'}
 function renderPanel(){
   if(panelMode==='go'){const sig='go'+S.scene+asleep;if(sig===panelSig)return;panelSig=sig;
-    const DST=[['farm','🏡','Nông trại (nhà)','Ruộng, chuồng gà vịt heo, đìa cá'],['town','🏭','Nhà máy xay + Cửa hàng gạo','Xay lúa thành gạo và bán gạo'],['market','🛒','Chợ làng','Thú y, vật tư nông nghiệp, các sạp'],['field','🌾','Cánh đồng lớn','12 thửa ruộng khai hoang'],['dairy','🐄','Trại bò sữa','Nuôi bò, vắt và bán sữa']];
+    const DST=[['farm','🏡','Nông trại (nhà)','Ruộng, chuồng gà vịt heo, đìa cá'],['town','🏭','Nhà máy xay + Cửa hàng gạo','Xay lúa thành gạo và bán gạo'],['market','🛒','Chợ làng','Thú y, vật tư nông nghiệp, các sạp'],['field','🌾','Cánh đồng lớn','20 thửa: trồng lúa, rau, quả'],['dairy','🐄','Trại bò sữa','Nuôi bò, vắt và bán sữa']];
     $('plist').innerHTML=DST.map(([id,ic,n,d])=>`<div class="row"><span class="ico">${ic}</span><div class="info"><b>${n}</b><small>${d}</small></div>${S.scene===id?'<span class="done">Đang ở đây</span>':`<button data-go="${id}">Đi</button>`}</div>`).join('');return}
   if(panelMode==='agro'||panelMode==='agri'){
     const L=panelMode==='agro'?AGRO:AGRI,sig=panelMode+S.money+JSON.stringify(S.feed)+S.med+S.seed+S.fert+Math.ceil(S.vaccT/10);if(sig===panelSig)return;panelSig=sig;
@@ -1219,16 +1282,37 @@ function pickGoal(){
     if(S.q>=QUESTS.length){S.won=true;toast('🎉 Bạn đã làm giàu! Cứ chơi tự do nhé');}
   }
 }
+document.querySelectorAll('#cropbar button').forEach(b=>b.onclick=ev=>{ev.stopPropagation();S.crop=b.dataset.crop;toast('Sẽ trồng: '+CROPS[S.crop].n+(S.crop==='lua'?' (gặt lúa mang đi xay)':S.crop==='rau'?' (nhanh, bán ở cửa hàng gạo)':' (lâu nhưng được giá, bán ở cửa hàng gạo)'))});
+const dctx=$('dial').getContext('2d');
+/* o tron 24 gio: tren = trua, duoi = nua dem; mat troi/trang chay quanh vanh */
+function drawDial(h){
+  const c=dctx,R0=56,cx=58,cy=58;c.clearRect(0,0,116,116);
+  for(let i=0;i<96;i++){const a0=((i/96)*24-12)/24*Math.PI*2-Math.PI/2,a1=(((i+1)/96)*24-12)/24*Math.PI*2-Math.PI/2,hh=((i+.5)/96)*24,col=skyRGB(hh);
+    c.fillStyle=`rgb(${col})`;c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,R0-5,a0-.01,a1+.01);c.closePath();c.fill()}
+  c.lineWidth=5;c.strokeStyle='#8a6a3a';c.beginPath();c.arc(cx,cy,R0-3,0,7);c.stroke();
+  c.lineWidth=2;c.strokeStyle='#e4dcc4';c.beginPath();c.arc(cx,cy,R0-.5,0,7);c.stroke();
+  c.fillStyle='rgba(255,255,255,.8)';[0,6,12,18].forEach(k=>{const a=(k-12)/24*Math.PI*2-Math.PI/2;c.beginPath();c.arc(cx+Math.cos(a)*(R0-14),cy+Math.sin(a)*(R0-14),2,0,7);c.fill()});
+  const a=(h-12)/24*Math.PI*2-Math.PI/2,px=cx+Math.cos(a)*(R0-14),py=cy+Math.sin(a)*(R0-14),day=h>=5.5&&h<18.5;
+  c.strokeStyle='rgba(60,40,20,.45)';c.lineWidth=2;c.beginPath();c.moveTo(cx,cy);c.lineTo(cx+Math.cos(a)*(R0-24),cy+Math.sin(a)*(R0-24));c.stroke();
+  if(day){const g=c.createRadialGradient(px,py,2,px,py,16);g.addColorStop(0,'rgba(255,230,120,.9)');g.addColorStop(1,'rgba(255,230,120,0)');c.fillStyle=g;c.beginPath();c.arc(px,py,16,0,7);c.fill();
+    c.fillStyle=h>=11&&h<14?'#fff2a0':(h<7||h>=17)?'#ff9a4a':'#ffd24a';c.strokeStyle='#8a5a1a';c.lineWidth=1.5;c.beginPath();c.arc(px,py,8,0,7);c.fill();c.stroke()}
+  else{c.fillStyle='#fff6d0';c.strokeStyle='#5a5a7a';c.lineWidth=1.5;c.beginPath();c.arc(px,py,7.5,0,7);c.fill();c.stroke();
+    c.fillStyle='rgb(22,30,72)';c.beginPath();c.arc(px+3.5,py-2.5,6.5,0,7);c.fill()}
+  c.fillStyle='#4a3a28';c.beginPath();c.arc(cx,cy,3,0,7);c.fill();
+}
 function updateUI(){
   $('money').textContent=S.money+' đồng';
   const h=Math.floor(S.min/60)%24,m=Math.floor(S.min)%60;
   $('time').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');$('day').textContent=S.day;
-  const name=rain>0?'Trời mưa':h<5?'Đêm khuya':h<10?'Sáng sớm':h<14?'Nắng trưa':h<18?'Nghỉ tay':'Chiều tối';
+  const hf=(S.min/60)%24,ph=phaseName(hf);$('phase').textContent=ph;drawDial(hf);
+  const name=rain>0?'Trời mưa':ph;
   $('stName').textContent=name;$('stSub').textContent=`vịt ${S.ducks.length} · gà ${S.chicks.length} · cá ${S.fish.length} · heo ${S.pigs.length} · mùa ${SEASON_PAL[season].n}`;$('bPig').disabled=S.money<PIG_COST||S.pigs.length>=MAX_PIG;$('bFish').disabled=S.money<FISH_COST||S.fish.length>=MAX_FISH;
   if(S.q<QUESTS.length){$('qTag').textContent=`MÀN ${S.q+1} · LÀNG QUÊ`;$('qTitle').textContent=QUESTS[S.q].t;$('qHint').textContent=QUESTS[S.q].h}
   else{$('qTag').textContent='HOÀN THÀNH';$('qTitle').textContent='Chơi tự do';$('qHint').textContent='Trồng lúa, nuôi thêm vịt gà, nhặt trứng thoải mái'}
-  $('inv').innerHTML=`Lúa ${S.lua} · Gạo ${S.gao} · Sữa ${S.sua}`+(S.mill.q+S.mill.out>0?` · máy: ${S.mill.q} chờ, ${S.mill.out} xong`:'')+`<br><small>Thức ăn — gà ${S.feed.ga} · vịt ${S.feed.vit} · heo ${S.feed.heo} · bò ${S.feed.bo} · cá ${S.feed.ca} · thuốc ${S.med} · lúa giống ${S.seed} · phân ${S.fert}</small>`;
+  $('inv').innerHTML=`Lúa ${S.lua} · Gạo ${S.gao} · Rau ${S.rau} · Quả ${S.qua} · Sữa ${S.sua}`+(S.mill.q+S.mill.out>0?` · máy: ${S.mill.q} chờ, ${S.mill.out} xong`:'')+`<br><small>Thức ăn — gà ${S.feed.ga} · vịt ${S.feed.vit} · heo ${S.feed.heo} · bò ${S.feed.bo} · cá ${S.feed.ca} · thuốc ${S.med} · hạt giống ${S.seed} · phân ${S.fert}</small>`;
   $('sign2').style.display=S.scene==='farm'?'':'none';
+  $('cropbar').style.display=(S.scene==='farm'||S.scene==='field')&&!asleep?'flex':'none';
+  document.querySelectorAll('#cropbar button').forEach(b=>b.classList.toggle('on',b.dataset.crop===S.crop));
   $('bDuck').disabled=S.money<DUCK_COST||S.ducks.length>=MAX_PET;$('bChick').disabled=S.money<CHICK_COST||S.chicks.length>=MAX_PET;
 }
 function buy(kind){
@@ -1253,8 +1337,8 @@ function step(dt){
     if(P.inside)rain-=dt*3;if(rain<=0&&P.inside){P.inside=false;toast('Tạnh mưa rồi, ra ngoài thôi!')}}
   else if(Math.random()<dt*.012*(season===1?3:season===3?.5:1)){rain=rand(25,45);rainMax=rain;toast('Trời kéo mây đen, gió nổi lên! Mọi người đi trú mưa nhé');startShelter()}
   if(S.built.orchard){S.fruitT+=dt;if(S.fruitT>=30){S.fruitT=0;S.fruit=Math.min(4,S.fruit+1)}}
-  S.plots.forEach(p=>{if(p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=GROW[p.st-1]){p.st++;p.t=0}}});
-  S.fields.forEach(p=>{if(p.open&&p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=GROW[p.st-1]){p.st++;p.t=0}}});
+  S.plots.forEach(p=>{if(p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=cropOf(p).grow[p.st-1]){p.st++;p.t=0}}});
+  S.fields.forEach(p=>{if(p.open&&p.st>0&&p.st<3){p.t+=dt*growMul()*(p.fert?1.6:1);if(p.t>=cropOf(p).grow[p.st-1]){p.st++;p.t=0}}});
   S.pigs.forEach(p=>{if(isNight()){p.w=0;return}hunger(p,dt,1/100);if(canWork(p))p.size=Math.min(1,p.size+dt/PIG_GROW);wander(p,dt,675,870,246,276,16)});
   S.cows.forEach(b=>{if(isNight()){b.w=0;return}hunger(b,dt,1/110);if(canWork(b))b.milk=Math.min(1,b.milk+dt/35*(season===0?1.1:1));if(rain>0){const dx=245-b.x,dy=398-b.y,m=Math.hypot(dx,dy);if(m>4){b.x+=dx/m*40*dt;b.y+=dy/m*40*dt;b.d=dx>=0?1:-1;b.w=1;b.inside=false}else{b.inside=true;b.w=0}}else{b.inside=false;wander(b,dt,110,1000,410,520,12)}});
   S.fish.forEach(f=>{hunger(f,dt,1/120,false);f.size=Math.min(1,f.size+dt/spOf(f).grow*(S.built.hut?2:1)*(f.f>.15?1:0));f.x+=f.d*(22+f.size*8)*dt;f.y+=Math.sin(T*1.3+f.x*.02)*10*dt;
@@ -1264,7 +1348,7 @@ function step(dt){
     if(rain>0){const tx=Math.max(940,Math.min(1010,b.x)),ty=292,dx=tx-b.x,dy=ty-b.y,m=Math.hypot(dx,dy);
       if(m>3){const sp=k==='duck'?60:55;b.x+=dx/m*sp*dt;b.y+=dy/m*sp*dt;if(Math.abs(dx)>2)b.d=Math.sign(dx);b.w=1}else b.w=0}
     else wander(b,dt,30,1000,420,520,k==='duck'?34:28);
-    hunger(b,dt,1/80);
+    hunger(b,dt,1/80,true,true);
     if(b.m){if(k==='chick'&&Math.random()<dt*.02)float(b.x,b.y-70,'Ò ó o o!','#ffe27a');return}
     if(!canWork(b))return;
     b.egg-=dt*(S.built.coop?1.6:1)*(season===0?1.25:season===3?.8:1);
@@ -1286,8 +1370,18 @@ function step(dt){
 }
 
 /* ---------- render ---------- */
+/* mat troi di chuyen tren bau troi theo gio; buoi trua len cao, choi chang */
+function drawSun(t){
+  const h=(S.min/60)%24;if(h<5.5||h>=18.5||rain>0||S.scene==='market')return;
+  const p=(h-5.5)/13,x=140+p*1000,y=178-Math.sin(p*Math.PI)*132,noon=Math.max(0,1-Math.abs(h-12.25)/1.6),low=h<7.5||h>=16.5;
+  const g=ctx.createRadialGradient(x,y,6,x,y,90+noon*60);g.addColorStop(0,low?'rgba(255,170,90,.55)':'rgba(255,244,170,.6)');g.addColorStop(1,'rgba(255,240,170,0)');
+  ctx.fillStyle=g;ctx.fillRect(x-160,y-160,320,320);
+  ctx.fillStyle=low?'#ff9a4a':noon>.2?'#fffbe0':'#ffd84a';ctx.beginPath();ctx.arc(x,y,22+noon*3,0,7);ctx.fill();
+  if(noon>.2){ctx.strokeStyle=`rgba(255,245,170,${.5*noon})`;ctx.lineWidth=3;ctx.beginPath();for(let i=0;i<14;i++){const a=i/14*6.283+t*.3,r1=32,r2=44+Math.sin(t*3+i)*5;ctx.moveTo(x+Math.cos(a)*r1,y+Math.sin(a)*r1);ctx.lineTo(x+Math.cos(a)*r2,y+Math.sin(a)*r2)}ctx.stroke()}
+}
 function render(t){
   ctx.drawImage(({farm:bg,town:bgT,field:bgF,dairy:bgD,market:bgM})[S.scene]||bg,0,0);
+  drawSun(t);
   if(S.scene==='farm'){for(let i=0;i<2;i++)drawPlot(i,t);drawPond(t);edgeSign(1095,452,'Chợ · Nhà máy ▶');edgeSign(56,500,'◀ Cánh đồng lớn');if(asleep)tagText(115,235,'Z z z',28)}else if(S.scene==='field')drawField(t);else if(S.scene==='dairy')drawDairy(t);else if(S.scene==='market')drawMarket(t);else drawTown(t);
   // y-sorted actors
   const A=[{y:P.y,f:()=>{if(P.inside||asleep)return;drawPerson({x:P.x,y:P.y,d:P.d,hat:P.hat,cloth:P.cloth,gender:P.gender,age:P.age,hatKind:P.hatKind,pause:0,spd:P.moving?1:0},t);
@@ -1313,6 +1407,7 @@ function render(t){
       ctx.fillStyle=`rgba(255,250,220,${k})`;
       for(let i=0;i<60;i++){const sx=(i*197.3)%W,sy=(i*83.7)%185,tw=.5+.5*Math.sin(t*2+i);ctx.globalAlpha=k*tw;ctx.fillRect(sx,sy,2,2)}
       ctx.globalAlpha=k;ctx.beginPath();ctx.arc(300,50,24,0,7);ctx.fillStyle='#fff6d0';ctx.fill();ctx.beginPath();ctx.arc(309,45,21,0,7);ctx.fillStyle='rgba(20,30,70,.85)';ctx.fill();ctx.globalAlpha=1}}
+  else if(h>=10.5&&h<14&&rain<=0){const k=Math.max(0,1-Math.abs(h-12.25)/1.75);ctx.fillStyle=`rgba(255,250,200,${.13*k})`;ctx.fillRect(0,0,W,H)}
   else if(h>=16&&h<18){ctx.fillStyle=`rgba(255,170,60,${(h-16)/2*.12})`;ctx.fillRect(0,0,W,H)}
   if(fadeT>0){ctx.globalAlpha=Math.min(1,fadeT/.6);ctx.drawImage(snap,0,0);ctx.globalAlpha=1}
   // floating text
@@ -1338,7 +1433,7 @@ function act(x,y){
   if(sc==='town'){if(x<=125&&y>=420&&y<=510)goScene('farm');else if(Math.abs(x-690)<85&&y>=440&&y<=520)goScene('market');else townAct(x,y);return}
   if(sc==='market'){if(x<=125&&y>=420&&y<=510)goScene('town');else marketAct(x,y);return}
   if(sc==='dairy'){if(Math.abs(x-1085)<65&&y>=420&&y<=510)goScene('field');else dairyAct(x,y);return}
-  if(sc==='field'){if(Math.abs(x-1085)<65&&y>=420&&y<=510)goScene('farm');else if(x<=170&&y>=670&&y<=745)goScene('dairy');else fieldAct(x,y);return}
+  if(sc==='field'){if(Math.abs(x-1085)<65&&y>=420&&y<=510)goScene('farm');else if(x<=170&&y>=705&&y<=765)goScene('dairy');else fieldAct(x,y);return}
   if(Math.abs(x-1095)<75&&y>=420&&y<=510){openPanel('go');return}
   if(x<=125&&y>=470&&y<=552){goScene('field');return}
   if(rain>0&&x>=55&&x<=173&&y>=150&&y<=262){P.inside=true;P.x=115;P.y=300;P.goal=null;P.pending=null;toast('Đang trú mưa trong nhà... (bấm hoặc nhấn phím để ra ngoài)');return}
